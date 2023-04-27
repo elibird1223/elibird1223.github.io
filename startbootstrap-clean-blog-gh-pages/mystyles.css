@@ -1,0 +1,44 @@
+ul{ font-size: 20px;}
+
+body {
+    background-color: whitesmoke;
+    font-family:Arial, Helvetica, sans-serif;
+    color: rgb(42, 42, 42);
+}
+
+h1, h2{
+    text-align: center;
+}
+.resume div{
+    border-style: dotted;
+    margin: auto;
+    width: 50%;
+    margin-bottom: 10px;
+}
+ol {
+    font-size: 18px;
+    
+}
+ul {
+    font-size: 16px;
+}
+li {
+    margin:3px;
+}
+.bottom {
+    text-align: center;
+    color: rgb(132, 120, 187);
+}
+.tableau {
+   text-align: center;
+   margin: auto;
+}
+.nav li a, .footer li a {
+    text-align: center;
+    margin: 30px;
+    /* background-color: grey; */
+}
+.nav, .footer {
+    background-color:rgb(198, 196, 196);
+    padding:10px;
+}
