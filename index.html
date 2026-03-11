@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BYU Economics Career Explorer</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="header">
+    <div class="header-content">
+      <div class="logo">
+        <span class="logo-byu">BYU</span>
+        <span class="logo-text">Economics Career Explorer</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-view="chat">AI Career Advisor</button>
+        <button class="nav-btn" data-view="explorer">Alumni Explorer</button>
+        <button class="nav-btn" data-view="tracks">Econ Tracks</button>
+        <button class="nav-btn" data-view="stats">Career Statistics</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- Chat View -->
+    <section id="chat-view" class="view active">
+      <div class="chat-container">
+        <div class="chat-sidebar">
+          <h3>Suggested Questions</h3>
+          <div class="suggested-questions">
+            <button class="suggestion-btn">What jobs can I get with an economics degree?</button>
+            <button class="suggestion-btn">What companies hire the most BYU economics graduates?</button>
+            <button class="suggestion-btn">Tell me about careers in economic consulting</button>
+            <button class="suggestion-btn">What's the salary outlook for data scientists?</button>
+            <button class="suggestion-btn">Which graduates went into investment banking?</button>
+            <button class="suggestion-btn">What skills should I develop for policy work?</button>
+            <button class="suggestion-btn">How do I prepare for graduate school?</button>
+            <button class="suggestion-btn">What are the career paths in finance?</button>
+          </div>
+        </div>
+        <div class="chat-main">
+          <div class="chat-messages" id="chat-messages">
+            <div class="message assistant">
+              <div class="message-content">
+                <p>Hi! I'm your BYU Economics Career Advisor. I have access to data on <strong>592 BYU economics graduates</strong>, including their career paths, companies, and industries.</p>
+                <p>I can also provide information about job market outlook from the Bureau of Labor Statistics and BYU's economics program resources.</p>
+                <p>What would you like to know about careers in economics?</p>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-container">
+            <form id="chat-form" class="chat-form">
+              <input
+                type="text"
+                id="chat-input"
+                class="chat-input"
+                placeholder="Ask about careers, industries, companies, or skills..."
+                autocomplete="off"
+              >
+              <button type="submit" class="chat-submit" id="chat-submit">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Explorer View -->
+    <section id="explorer-view" class="view">
+      <div class="explorer-container">
+        <div class="explorer-filters">
+          <h3>Filter Graduates</h3>
+          <div class="filter-group">
+            <label for="industry-filter">First Job Industry</label>
+            <select id="industry-filter" class="filter-select">
+              <option value="">All Industries</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="company-filter">First Employer</label>
+            <select id="company-filter" class="filter-select">
+              <option value="">All Companies</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="location-filter">First Job Location</label>
+            <select id="location-filter" class="filter-select">
+              <option value="">All Locations</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="gradschool-filter">Graduate School</label>
+            <select id="gradschool-filter" class="filter-select">
+              <option value="">All (including none)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="search-filter">Search Names or Companies</label>
+            <input type="text" id="search-filter" class="filter-input" placeholder="Search by name or company...">
+          </div>
+          <button class="clear-filters-btn" id="clear-filters">Clear All Filters</button>
+          <div class="filter-results">
+            <span id="filter-count">0</span> graduates found
+          </div>
+        </div>
+        <div class="explorer-results">
+          <div class="results-header">
+            <h3>First Jobs After Graduation</h3>
+            <p style="font-size: 0.875rem; color: var(--gray-500); margin-top: 0.25rem;">What BYU Economics graduates did right out of undergrad</p>
+          </div>
+          <div class="results-list" id="results-list">
+            <!-- Graduate cards will be inserted here -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Econ Tracks View -->
+    <section id="tracks-view" class="view">
+      <div class="tracks-container">
+        <div class="tracks-header">
+          <h2>What Can You Do with an Economics Degree?</h2>
+          <p>Economics offers versatile career opportunities, reflected in the diverse electives within the major. The Department has grouped electives into Econ Tracks, each aligning with specific career paths. Though these tracks don't appear on transcripts or diplomas, they can help guide your graduation plan.</p>
+          <p class="tracks-note">The tracks are grouped based on similar skills that you develop in the econ major that are used within those careers. Students are welcome to take any elective, even if it spans multiple tracks.</p>
+        </div>
+
+        <div class="tracks-grid">
+          <!-- Management/Finance -->
+          <div class="track-card" data-track="Management/Finance">
+            <div class="track-header">
+              <span class="track-icon">💰</span>
+              <h3>Management/Finance</h3>
+            </div>
+            <div class="track-content">
+              <p>The Management/Finance Track explores market competition, strategic decision making, and regulation. These analytic skills are readily applied in many business and finance roles.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Actuary</li>
+                  <li>Business Analyst</li>
+                  <li>Economic Consultant</li>
+                  <li>Financial Advisor</li>
+                  <li>Financial Analyst</li>
+                  <li>Investment Research Analyst</li>
+                  <li>Management Consultant</li>
+                  <li>Manager</li>
+                  <li>Market Research Analyst</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 420 – Antitrust & Regulation</li>
+                  <li>ECON 442 – Behavioral Economics</li>
+                  <li>ECON 450 – Financial Economics</li>
+                  <li>ECON 453 – Monetary Theory</li>
+                  <li>ECON 458 – International Trade</li>
+                  <li>ECON 476 – Industrial Organization</li>
+                  <li>ECON 478 – Game Theory</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Minors:</strong> Foreign language; Strategy; Business; Entrepreneurship</li>
+                  <li><strong>Non‑Econ Courses:</strong> IS 110 (Spreadsheets); IS 201 (Management Information Systems)</li>
+                  <li><strong>BYU Clubs:</strong> Management Consulting Association</li>
+                  <li><strong>Graduate Programs:</strong> MBA</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Data Analytics -->
+          <div class="track-card" data-track="Data Analytics">
+            <div class="track-header">
+              <span class="track-icon">💻</span>
+              <h3>Data Analytics</h3>
+            </div>
+            <div class="track-content">
+              <p>The Data Analytics Track enhances the data analysis core curriculum with additional tools used to investigate large amounts of data. This prepares students for cutting-edge jobs in tech companies and supports the most quantitative roles in finance or academics.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Actuary</li>
+                  <li>Data Analyst</li>
+                  <li>Data Scientist</li>
+                  <li>Financial Analyst</li>
+                  <li>Investment Research Analyst</li>
+                  <li>Market Research Analyst</li>
+                  <li>Statistician (Economic)</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 442 – Behavioral Economics</li>
+                  <li>ECON 484 – Machine Learning</li>
+                  <li>ECON 588 – Advanced Econometrics</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Majors:</strong> ACME</li>
+                  <li><strong>Minors:</strong> Computer Science; Statistics</li>
+                  <li><strong>Non‑Econ Courses:</strong> CS 111 (Python); LING 360 (Text Processing); STAT 250 (R Programming); STAT 274 (Theory of Interest); STAT 281 (Data Visualization)</li>
+                  <li><strong>Graduate Programs:</strong> Masters in Data Analytics; PhD</li>
+                  <li><strong>Software:</strong> Dash; Shiny; Streamlit</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Policy -->
+          <div class="track-card" data-track="Policy">
+            <div class="track-header">
+              <span class="track-icon">🏛️</span>
+              <h3>Policy</h3>
+            </div>
+            <div class="track-content">
+              <p>The Policy Track applies economic analysis across a variety of fields where public policy is at the forefront. These courses build applied econometrics and policy skills useful in government, research, and policy careers.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Demographer</li>
+                  <li>Foreign Service Officer</li>
+                  <li>Journalist</li>
+                  <li>Policy Analyst</li>
+                  <li>Think Tank Researcher</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 440 – Environmental Economics</li>
+                  <li>ECON 442 – Behavioral Economics</li>
+                  <li>ECON 461 – Education Economics</li>
+                  <li>ECON 463 – Labor Economics</li>
+                  <li>ECON 465 – Health Economics</li>
+                  <li>ECON 468 – Urban Economics</li>
+                  <li>ECON 475 – Public Economics</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Minors:</strong> Healthcare Leadership; Political Science; Urban &amp; Regional Planning (Geography)</li>
+                  <li><strong>BYU Clubs:</strong> Foreign Service Student Organization; Model UN</li>
+                  <li><strong>Graduate Programs:</strong> MD; Masters of Public Policy</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Global Issues -->
+          <div class="track-card" data-track="Global Issues">
+            <div class="track-header">
+              <span class="track-icon">🌍</span>
+              <h3>Global Issues</h3>
+            </div>
+            <div class="track-content">
+              <p>The Global Issues Track emphasizes macroeconomics across countries, including measurement challenges and international policy. This toolkit is especially useful for internationally oriented careers.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Demographer</li>
+                  <li>Foreign Service Officer</li>
+                  <li>Intelligence Officer (CIA)</li>
+                  <li>Journalist</li>
+                  <li>Policy Analyst</li>
+                  <li>Think Tank Researcher</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 431 – Economic Development</li>
+                  <li>ECON 432 – Economic Growth</li>
+                  <li>ECON 440 – Environmental Economics</li>
+                  <li>ECON 458 – International Trade</li>
+                  <li>ECON 459 – International Monetary Economics</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Minors:</strong> Area Studies; Foreign Language; Global and Community Impact; Global Business &amp; Literacy; Global Women’s Studies</li>
+                  <li><strong>BYU Clubs:</strong> Ballard Center Social Impact Association; Model UN; Students for International Development</li>
+                  <li><strong>BYU Programs:</strong> International Studies Programs</li>
+                  <li><strong>Graduate Programs:</strong> Masters of Public Policy</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pre-PhD -->
+          <div class="track-card" data-track="Pre-PhD">
+            <div class="track-header">
+              <span class="track-icon">🎓</span>
+              <h3>Pre-PhD</h3>
+            </div>
+            <div class="track-content">
+              <p>The Pre‑PhD Track cultivates deeper analytic and empirical skills needed to pursue rigorous, independent research. The 500‑level courses expose students to the first‑year curriculum in most economics, finance, or accounting PhD programs.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Data Scientist</li>
+                  <li>Federal Reserve Research Assistant</li>
+                  <li>Professor</li>
+                  <li>Think Tank Researcher</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 580 – Advanced Micro Theory 1</li>
+                  <li>ECON 581 – Advanced Macroeconomics</li>
+                  <li>ECON 582 – Advanced Micro Theory 2</li>
+                  <li>ECON 588 – Advanced Econometrics</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Majors:</strong> Mathematics</li>
+                  <li><strong>Minors:</strong> Mathematics</li>
+                  <li><strong>Non‑Econ Courses:</strong> Data analytics courses</li>
+                  <li><strong>Graduate Programs:</strong> PhD (Economics, Finance, Accounting, or related disciplines)</li>
+                  <li><strong>Software:</strong> Mathematica; MATLAB; Stata (including Stata programming workshops)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Law -->
+          <div class="track-card" data-track="Law">
+            <div class="track-header">
+              <span class="track-icon">⚖️</span>
+              <h3>Law</h3>
+            </div>
+            <div class="track-content">
+              <p>The Law Track focuses on reasoning skills and policy issues that are most relevant to service in government. It provides an excellent basis for graduate study in law or work in advocacy and government.</p>
+
+              <div class="track-section">
+                <h4>Related Careers</h4>
+                <ul>
+                  <li>Federal Reserve Research Assistant</li>
+                  <li>Foreign Service Officer</li>
+                  <li>Intelligence Officer (CIA)</li>
+                  <li>Policy Analyst</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Related Econ Electives</h4>
+                <ul>
+                  <li>ECON 420 – Antitrust &amp; Regulation</li>
+                  <li>ECON 421 – Law &amp; Economics</li>
+                  <li>ECON 463 – Labor Economics</li>
+                  <li>ECON 477 – Political Economics</li>
+                  <li>ECON 478 – Game Theory</li>
+                </ul>
+              </div>
+
+              <div class="track-section">
+                <h4>Complements</h4>
+                <ul>
+                  <li><strong>Minors:</strong> Philosophy; Logic; Political Science</li>
+                  <li><strong>Non‑Econ Courses:</strong> HIST 392 (US Constitution); PHIL 205 (Logic); POLI 201 &amp; 202 (Western Political Heritage); STDEV 168R; STDEV 365</li>
+                  <li><strong>BYU Clubs:</strong> Civic Engagement Leadership; Pre‑Law Student Association</li>
+                  <li><strong>Graduate Programs:</strong> Juris Doctor (JD)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tracks-footer">
+          <h3>Which Track is Best for Me?</h3>
+          <p>One of the best ways to learn which career is best for you is through <strong>informational interviews</strong>. Start these conversations while you are still uncertain—through these interviews you can learn a lot about careers and what life looks like in these roles.</p>
+          <blockquote>
+            "We must do more than ask the Lord for excellence. Perspiration must precede inspiration; there must be effort before there is excellence. We must do more than pray for these outcomes at BYU, though we must surely pray. We must take thought. We must make effort. We must be patient. We must be professional. We must be spiritual."
+            <cite>— Spencer W. Kimball, "The Second Century of Brigham Young University"</cite>
+          </blockquote>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats View -->
+    <section id="stats-view" class="view">
+      <div class="stats-container">
+        <div class="stats-overview">
+          <div class="stat-card">
+            <div class="stat-value" id="total-grads">0</div>
+            <div class="stat-label">Graduates with First Job Data</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="total-industries">0</div>
+            <div class="stat-label">Industries</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="total-companies">0</div>
+            <div class="stat-label">Companies</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="total-gradschools">0</div>
+            <div class="stat-label">Grad Schools</div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stats-section full-width">
+            <h3>Where BYU Economics Alumni Work (First Job Location)</h3>
+            <div id="alumni-map" class="alumni-map"></div>
+            <div class="map-legend" id="map-legend"></div>
+          </div>
+          <div class="stats-section">
+            <h3>First Job Industry Distribution</h3>
+            <div class="chart-container">
+              <canvas id="industry-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <h3>Top First Employers</h3>
+            <div class="top-list" id="top-companies">
+              <!-- Will be populated dynamically -->
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <h3>Top First Job Locations</h3>
+            <div class="top-list" id="top-locations">
+              <!-- Will be populated dynamically -->
+            </div>
+          </div>
+
+          <div class="stats-section">
+            <h3>Graduate Schools</h3>
+            <div class="top-list" id="top-gradschools">
+              <!-- Will be populated dynamically -->
+            </div>
+          </div>
+
+          <div class="stats-section full-width">
+            <h3>Degree Types Pursued</h3>
+            <div class="degree-types" id="degree-types">
+              <!-- Will be populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>BYU Economics Career Explorer - Powered by AI</p>
+    <p class="footer-note">Data based on LinkedIn profiles of BYU Economics graduates</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="js/data.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
