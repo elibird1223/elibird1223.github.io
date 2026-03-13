@@ -3,6 +3,9 @@
 const LOCATION_ALIASES = {
   'Salt Lake City': [
     'salt lake city, utah', 'salt lake city metropolitan area', 'salt lake city, ut',
+    'salt lake city, ut', 'salt lake city, utah', 'salt lake city, utah, usa', 'salt lake city, usa',
+    'salt lake city, utah, us', 'salt lake city, us',
+    'greater salt lake city area', 'salt lake county, utah',
     'salt lake city, utah, united states', 'salt lake county, utah', 'salt lake county, utah, united states',
   ],
   'Provo': [

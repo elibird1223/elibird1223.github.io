@@ -5,16 +5,20 @@ const DataManager = {
   stats: null,
   blsData: null,
   byuProgram: null,
+  byuWeb: null,
   loaded: false,
 
   async loadAll() {
     if (this.loaded) return;
 
     try {
-      const [graduatesData, blsData, byuProgram] = await Promise.all([
+      const [graduatesData, blsData, byuProgram, gradGuide, phdPlacements, byuWeb] = await Promise.all([
         fetch('data/graduates.json').then(r => r.json()),
         fetch('data/bls-outlook.json').then(r => r.json()),
-        fetch('data/byu-program.json').then(r => r.json())
+        fetch('data/byu-program.json').then(r => r.json()),
+        fetch('data/grad-school-guide-summary.json').then(r => r.json()),
+        fetch('data/phd-placements.json').then(r => r.json()),
+        fetch('data/byu-web-summaries.json').then(r => r.json())
       ]);
 
       // De-duplicate graduates by LinkedIn URL (keeps the first occurrence).
@@ -30,6 +34,9 @@ const DataManager = {
       this.stats = graduatesData.stats;
       this.blsData = blsData;
       this.byuProgram = byuProgram;
+      this.gradGuide = gradGuide;
+      this.phdPlacements = phdPlacements;
+      this.byuWeb = byuWeb;
       this.loaded = true;
 
       console.log(`Loaded ${this.graduates.length} graduates`);
@@ -119,11 +126,9 @@ const DataManager = {
         const searchLower = filters.search.toLowerCase();
         const fullName = `${g.firstName || ''} ${g.lastName || ''}`.toLowerCase();
         const firstCompany = (g.firstCompany || '').toLowerCase();
-        const currentCompany = (g.currentCompany || '').toLowerCase();
         const matches =
           fullName.includes(searchLower) ||
-          firstCompany.includes(searchLower) ||
-          currentCompany.includes(searchLower);
+          firstCompany.includes(searchLower);
         if (!matches) return false;
       }
       return true;
@@ -224,6 +229,9 @@ const DataManager = {
       .map(([ind, examples]) => `${ind}:\n${examples}`)
       .join('\n\n');
 
+    const phdSummary = buildPhdSummary(this.phdPlacements);
+    const byuWebSummaries = this.byuWeb || {};
+
     return {
       summary: `Total BYU Economics graduates in dataset: ${this.stats.totalGraduates}`,
       industryBreakdown,
@@ -233,10 +241,37 @@ const DataManager = {
       degreeTypes,
       blsOutlook,
       industryExamples,
-      byuProgram: JSON.stringify(this.byuProgram, null, 2)
+      byuProgram: JSON.stringify(this.byuProgram, null, 2),
+      gradSchoolGuide: this.gradGuide,
+      phdSummary,
+      byuWeb: byuWebSummaries
     };
   }
 };
+
+function buildPhdSummary(phdData) {
+  if (!phdData || !Array.isArray(phdData.placements)) return 'Not available';
+  const placements = phdData.placements;
+
+  const total = placements.length;
+  const counts = {};
+  placements.forEach(p => {
+    const prog = (p.phdProgram || '').trim();
+    if (!prog) return;
+    counts[prog] = (counts[prog] || 0) + 1;
+  });
+
+  const topPrograms = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([prog, count]) => `${prog}: ${count} students`)
+    .join('\n');
+
+  return `Total documented PhD placements: ${total}
+
+Top PhD programs for BYU-connected students:
+${topPrograms}`;
+}
 
 // Export for use in other modules
 window.DataManager = DataManager;

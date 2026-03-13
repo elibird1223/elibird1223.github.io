@@ -283,6 +283,7 @@ const App = {
     const ctx = document.getElementById('industry-chart').getContext('2d');
     // Use first job industries for consistency
     const firstJobIndustries = DataManager.getFirstJobIndustries();
+    const totalFirstJobs = firstJobIndustries.reduce((sum, [, count]) => sum + count, 0);
 
     const colors = [
       '#002E5D', // BYU Navy
@@ -300,7 +301,10 @@ const App = {
     this.industryChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: firstJobIndustries.map(([name]) => name),
+        labels: firstJobIndustries.map(([name, count]) => {
+          const pct = totalFirstJobs ? Math.round((count / totalFirstJobs) * 100) : 0;
+          return `${name} (${pct}%)`;
+        }),
         datasets: [{
           data: firstJobIndustries.map(([, count]) => count),
           backgroundColor: colors,

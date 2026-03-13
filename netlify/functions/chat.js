@@ -1,142 +1,298 @@
-// Netlify serverless function for chat – rule-based, no external AI calls.
-// Uses aggregated context from the frontend (graduates.json, BLS data, BYU program info)
-// to return data-driven, templated advice for free.
+// Netlify serverless function for AI chat (Claude / Anthropic).
+// Reads API key from Netlify environment variable: ANTHROPIC_API_KEY
+//
+// Chat quality upgrade: retrieve 5–10 relevant alumni examples from data/graduates.json
+// and inject them into the context so responses are specific and grounded.
+
+const fs = require('fs');
+const path = require('path');
+
+const SYSTEM_PROMPT = `You are the BYU Economics Career Advisor.
+
+You MUST follow these rules:
+- Use ONLY the data provided in the CONTEXT block (alumni outcomes, BLS data, BYU program JSON, BYU web summaries). Do NOT invent stats, rankings, employer counts, class sequences, or requirements.
+- If a user asks for a number and it is not explicitly in the context, say "I don’t have that number in the dataset" and suggest how to find it (for example: use the Alumni Explorer filters or official BYU pages).
+- Prefer short, actionable answers: 3–8 bullets plus 1–2 short paragraphs. Lead with the most important advice first.
+- When citing outcomes, include counts and percentages exactly as shown in the context. Do not round differently or guess.
+- If the user asks about a specific company/industry/track/goal, tailor the answer to that topic AND ask exactly ONE follow-up question to refine the advice.
+- When possible, cite 3–6 relevant alumni examples from the RELEVANT ALUMNI EXAMPLES section (names + roles + companies) to make the answer concrete.
+- For questions about classes, sequencing, declaring the major/minor, minors-for-majors, or econ roadmaps, rely on the BYU PROGRAM INFO and BYU ECON WEB SUMMARIES sections. Do NOT guess course requirements or policies beyond what is written there.
+- For questions about grad school in economics or other disciplines, base your guidance on the GRAD SCHOOL GUIDE, PHD PLACEMENTS SUMMARY, and BYU ECON WEB SUMMARIES. If something is not covered there, say you don’t know.
+- Never claim you contacted BYU, accessed private systems, or viewed live student records. You are only using the static dataset and summaries provided.`;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
-    const { message, context } = JSON.parse(event.body || '{}');
-
+    const { message, context, conversationHistory = [] } = JSON.parse(event.body || '{}');
     if (!message) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Message is required' }) };
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
       return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Message is required' })
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          response:
+            'AI is not configured yet. Add `ANTHROPIC_API_KEY` in Netlify environment variables, then redeploy.\\n\\n' +
+            'In the meantime, use the Alumni Explorer + Career Statistics tabs to answer questions from the dataset.'
+        })
       };
     }
 
-    const response = getRuleBasedResponse(message, context || {});
+    const alumniExamples = getRelevantAlumniExamples(message, 8);
+    const contextMessage = buildContextMessage(context || {}, alumniExamples);
+    const history = Array.isArray(conversationHistory) ? conversationHistory : [];
+
+    const responseText = await callAnthropic({
+      apiKey,
+      userMessage: message,
+      contextMessage,
+      conversationHistory: history.slice(-10)
+    });
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ response })
+      body: JSON.stringify({ response: responseText })
     };
   } catch (error) {
     console.error('Chat function error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: 'Failed to process chat request',
-        details: error.message
-      })
+      body: JSON.stringify({ error: 'Failed to process chat request', details: error.message })
     };
   }
 };
 
-function getRuleBasedResponse(message, context) {
-  const msgLower = message.toLowerCase();
-  const summary = context.summary || '';
-  const industryBreakdown = context.industryBreakdown || '';
-  const topCompanies = context.topCompanies || '';
-  const topLocations = context.topLocations || '';
-  const topGradSchools = context.topGradSchools || '';
-  const degreeTypes = context.degreeTypes || '';
-  const blsOutlook = context.blsOutlook || '';
+function buildContextMessage(context, alumniExamples) {
+  const examplesBlock = (alumniExamples && alumniExamples.length)
+    ? alumniExamples.map((ex, idx) => `${idx + 1}. ${ex}`).join('\n')
+    : 'No specific alumni examples matched this question.';
 
-  // Salary / pay questions
-  if (msgLower.includes('salary') || msgLower.includes('pay') || msgLower.includes('earn') || msgLower.includes('money') || msgLower.includes('compensation')) {
-    return [
-      `Here’s a salary‑focused view using the BLS data included in this app:\n`,
-      `**Economics‑related roles and outlook (BLS)**\n${blsOutlook}\n`,
-      `For BYU Econ grads specifically, many end up in Banking & Finance, Tech & Data Analytics, and Consulting – which typically sit on the higher end of those salary distributions.`,
-      `You can combine this with the industry breakdown and top employers to target roles that match both your interests and pay expectations.`
-    ].join('\n');
+  return `CONTEXT (use this as your only source of truth):
+
+GRADUATE SUMMARY:
+${context.summary || 'Not available'}
+
+INDUSTRY DISTRIBUTION (CURRENT INDUSTRY):
+${context.industryBreakdown || 'Not available'}
+
+TOP EMPLOYERS:
+${context.topCompanies || 'Not available'}
+
+TOP LOCATIONS:
+${context.topLocations || 'Not available'}
+
+GRAD SCHOOL DESTINATIONS:
+${context.topGradSchools || 'Not available'}
+
+DEGREE TYPES:
+${context.degreeTypes || 'Not available'}
+
+BYU ECON MAJOR NAVIGATION & CORE SEQUENCING (from BYU web summaries):
+${context.byuWeb?.navigatingMajor?.overview || 'Not available'}
+Core sequences and hints:
+- ${context.byuWeb?.navigatingMajor?.coreSequences?.theory?.join('; ') || 'Theory sequence not available'}
+- ${context.byuWeb?.navigatingMajor?.coreSequences?.data?.join('; ') || 'Data sequence not available'}
+- Hints: ${(context.byuWeb?.navigatingMajor?.coreSequences?.hints || []).join(' | ') || 'Not available'}
+
+ECON ROADMAPS (planning tools):
+${context.byuWeb?.econRoadmaps?.overview || 'Not available'}
+Named roadmaps:
+${Array.isArray(context.byuWeb?.econRoadmaps?.roadmaps)
+  ? context.byuWeb.econRoadmaps.roadmaps.map(r => `- ${r.name}: ${r.objective} (when: ${r.when})`).join('\n')
+  : 'Not available'}
+
+MINORS FOR ECON MAJORS (recommended complements):
+${context.byuWeb?.minorsForMajors?.summary || 'Not available'}
+Recommended minors: ${(context.byuWeb?.minorsForMajors?.recommendedMinors || []).join(', ') || 'Not available'}
+
+DECLARING THE ECON MAJOR / MINOR:
+Major: ${context.byuWeb?.declareMajorMinor?.summaryMajor || 'Not available'}
+Minor / second major: ${context.byuWeb?.declareMajorMinor?.summaryMinor || 'Not available'}
+Advisement center: ${context.byuWeb?.declareMajorMinor?.advisementCenter || 'Not available'}
+
+GRAD SCHOOL IN OTHER DISCIPLINES:
+Common fields: ${(context.byuWeb?.gradSchoolOtherDisciplines?.commonFields || []).join(', ') || 'Not available'}
+Application tips (high level): ${(context.byuWeb?.gradSchoolOtherDisciplines?.applicationTips || []).slice(0, 5).join(' | ') || 'Not available'}
+
+GRAD PROGRAMS IN ECONOMICS (external PhD programs):
+${context.byuWeb?.gradProgramsEcon?.note || 'Not available'}
+High-level advice: ${context.byuWeb?.gradProgramsEcon?.advice || 'Not available'}
+
+BLS JOB OUTLOOK:
+${context.blsOutlook || 'Not available'}
+
+BYU PROGRAM INFO (JSON):
+${context.byuProgram || 'Not available'}
+
+GRAD SCHOOL GUIDE (SUMMARY + CHECKLIST):
+${context.gradSchoolGuide?.summaryText || 'Not available'}
+
+KEY MATH PREP FOR PHD:
+${context.gradSchoolGuide?.mathPrep || 'Not available'}
+
+KEY RESEARCH PREP FOR PHD:
+${context.gradSchoolGuide?.researchPrep || 'Not available'}
+
+PHD PLACEMENTS SUMMARY:
+${context.phdSummary || 'Not available'}
+
+RELEVANT ALUMNI EXAMPLES (use for concrete references; do not invent details):
+${examplesBlock}
+`;
+}
+
+let _cachedGraduates = null;
+
+function loadGraduates() {
+  if (_cachedGraduates) return _cachedGraduates;
+  const filePath = path.join(process.cwd(), 'data', 'graduates.json');
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const parsed = JSON.parse(raw);
+  _cachedGraduates = Array.isArray(parsed.graduates) ? parsed.graduates : [];
+  return _cachedGraduates;
+}
+
+function norm(s) {
+  return (s || '').toString().trim();
+}
+
+function tokenize(q) {
+  return q
+    .toLowerCase()
+    .replace(/[^a-z0-9\s&/+.-]/g, ' ')
+    .split(/\s+/g)
+    .map(t => t.trim())
+    .filter(t => t && t.length >= 3)
+    .slice(0, 24);
+}
+
+function scoreGraduate(g, tokens) {
+  const nameField = `${norm(g.firstName)} ${norm(g.lastName)}`.toLowerCase();
+  const firstJobFields = [
+    norm(g.firstCompany).toLowerCase(),
+    norm(g.firstJobTitle).toLowerCase(),
+    norm(g.firstIndustry).toLowerCase(),
+    norm(g.firstLocation).toLowerCase()
+  ];
+  const currentJobFields = [
+    norm(g.currentCompany).toLowerCase(),
+    norm(g.currentJobTitle).toLowerCase(),
+    norm(g.currentIndustry).toLowerCase(),
+    norm(g.currentLocation).toLowerCase()
+  ];
+  const gradFields = [
+    norm(g.gradSchool).toLowerCase(),
+    norm(g.degreeType).toLowerCase(),
+    norm(g.fieldOfStudy).toLowerCase()
+  ];
+
+  const hay = [
+    nameField,
+    ...firstJobFields,
+    ...currentJobFields,
+    ...gradFields
+  ].join(' | ');
+
+  let score = 0;
+  for (const t of tokens) {
+    if (!t) continue;
+    if (hay.includes(t)) {
+      score += 2;
+      // Slight extra weight if it matches first job fields
+      if (firstJobFields.some(f => f && f.includes(t))) score += 1;
+      // Slight extra weight if it matches current job fields on "now"/"current" questions
+      if ((tokens.includes('now') || tokens.includes('current')) &&
+          currentJobFields.some(f => f && f.includes(t))) {
+        score += 1;
+      }
+    }
   }
 
-  // Grad school / PhD / MBA / law
-  if (msgLower.includes('phd') || msgLower.includes('grad school') || msgLower.includes('graduate school') ||
-      msgLower.includes('mba') || msgLower.includes('law school') || msgLower.includes('jd')) {
-    return [
-      `The alumni data shows a pipeline from BYU Econ into a variety of graduate programs:\n`,
-      `**Where grads go to grad school:**\n${topGradSchools}\n`,
-      `**Types of degrees pursued:**\n${degreeTypes}\n`,
-      `For a PhD in economics, the strongest prep is the Pre‑PhD track (ECON 580/581/582/588) plus substantial math and research assistant experience. For MBA and law school, work experience (MBA) and GPA + LSAT (law) matter most.`,
-      `If you share the degree you’re considering (PhD Econ, MBA, JD, MPP, etc.), you can use the Econ Tracks section plus Alumni Explorer to design a course and experience plan that matches what successful alumni have done.`
-    ].join('\n');
+  // Boost obvious intents
+  if (tokens.includes('phd') && (hay.includes('phd') || hay.includes('ph.d'))) score += 3;
+  if (tokens.includes('law') && (hay.includes('jd') || hay.includes('law'))) score += 2;
+  if (tokens.includes('mba') && hay.includes('mba')) score += 2;
+
+  return score;
+}
+
+function formatExample(g) {
+  const name = `${norm(g.firstName)} ${norm(g.lastName)}`.trim() || 'Unknown';
+  const year = norm(g.undergradYear);
+  const first = [norm(g.firstJobTitle), norm(g.firstCompany)].filter(Boolean).join(' at ');
+  const firstLoc = norm(g.firstLocation);
+  const current = [norm(g.currentJobTitle), norm(g.currentCompany)].filter(Boolean).join(' at ');
+  const currentLoc = norm(g.currentLocation);
+  const grad = [norm(g.gradSchool), norm(g.degreeType), norm(g.fieldOfStudy)].filter(Boolean).join(' — ');
+
+  const bits = [];
+  bits.push(year ? `${name} (${year})` : name);
+  if (first) bits.push(`First: ${first}${firstLoc ? ` — ${firstLoc}` : ''}`);
+  if (current) bits.push(`Current: ${current}${currentLoc ? ` — ${currentLoc}` : ''}`);
+  if (grad) bits.push(`Grad: ${grad}`);
+  return bits.join(' | ');
+}
+
+function getRelevantAlumniExamples(userMessage, limit = 8) {
+  const grads = loadGraduates();
+  const tokens = tokenize(userMessage || '');
+  if (!tokens.length) return [];
+
+  const scored = [];
+  for (const g of grads) {
+    const s = scoreGraduate(g, tokens);
+    if (s <= 0) continue;
+    scored.push({ g, s });
   }
 
-  // Consulting questions
-  if (msgLower.includes('consult') || msgLower.includes('consulting')) {
-    return [
-      `Economic and management consulting show up clearly in the alumni data.\n`,
-      `**Industry snapshot:**\n${industryBreakdown}\n`,
-      `**Firms with multiple BYU Econ alumni (consulting‑heavy employers):**\n${topCompanies}\n`,
-      `Consulting roles value strong econometrics, data analysis (Stata/R/Python), slide‑building, and communication. The Management/Finance, Data Analytics, and Policy tracks on the Econ Tracks page give good elective combos for consulting.\n`,
-      `In the Alumni Explorer, try filtering first‑job industry to “Economic Consulting” or “Management Consulting” and read through a few profiles to see common paths.`
-    ].join('\n');
+  scored.sort((a, b) => b.s - a.s);
+  const top = scored.slice(0, limit).map(({ g }) => formatExample(g));
+  return top;
+}
+
+async function callAnthropic({ apiKey, userMessage, contextMessage, conversationHistory }) {
+  const messages = [];
+
+  for (const m of conversationHistory || []) {
+    if (!m || typeof m !== 'object') continue;
+    if (m.role !== 'user' && m.role !== 'assistant') continue;
+    if (typeof m.content !== 'string') continue;
+    messages.push({ role: m.role, content: m.content });
   }
 
-  // Banking / finance / investing
-  if (msgLower.includes('invest') || msgLower.includes('bank') || msgLower.includes('finance')) {
-    return [
-      `Great question about finance.\n`,
-      `Banking and Finance is one of the largest destinations for BYU Economics graduates.\n`,
-      `**Where grads are working (by industry):**\n${industryBreakdown}\n`,
-      `**Finance‑heavy employers that show up a lot in the data:**\n${topCompanies}\n`,
-      `In the alumni records you’ll see roles like:\n` +
-      `- Investment Banking Analyst\n` +
-      `- Financial Analyst (corporate or FP&A)\n` +
-      `- Equity Research / Investment Research\n` +
-      `- Wealth Management / Private Banking\n` +
-      `- Corporate Finance and related roles\n`,
-      `Most students who end up in these paths follow something like:\n` +
-      `- Choose the **Management/Finance** track on the Econ Tracks page\n` +
-      `- Join finance‑oriented clubs (investment, banking, consulting)\n` +
-      `- Do 1–2 internships in finance before senior year\n`,
-      `If you tell me whether you’re more interested in **investment banking**, **buy‑side investing**, or **corporate finance**, I can suggest a more specific plan (courses + internships + clubs) based on what past alumni did.`
-    ].join('\n');
+  messages.push({ role: 'user', content: userMessage });
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-latest',
+      max_tokens: 900,
+      temperature: 0.2,
+      system: `${SYSTEM_PROMPT}\\n\\n${contextMessage}`,
+      messages
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
   }
 
-  // Careers / “what can I do” questions (generic)
-  if (msgLower.includes('job') || msgLower.includes('career') || msgLower.includes('do with an economics')) {
-    return [
-      `You asked: "${message}". Here’s what the data on BYU Economics graduates says about careers overall:\n`,
-      `**Overview**\n${summary}\n`,
-      `**Where grads are working now (by industry):**\n${industryBreakdown}\n`,
-      `**Top employers hiring BYU Econ grads:**\n${topCompanies}\n`,
-      `If you’re leaning toward a specific area (finance, tech/data, consulting, policy, Pre‑PhD, law), ask about that track directly and then use the Alumni Explorer to filter by that industry and see real first jobs and companies.`
-    ].join('\n');
-  }
-
-  // Location / “where do people go” questions
-  if (msgLower.includes('where do') || msgLower.includes('location') || msgLower.includes('city') || msgLower.includes('move')) {
-    return [
-      `Here’s what the alumni data shows about locations:\n`,
-      `**Top first‑job locations:**\n${topLocations}\n`,
-      `The interactive map on the Career Statistics tab shows these hubs geographically (including non‑US cities where first jobs are located).`,
-      `If you have a target city or region, you can search for it in the Alumni Explorer to see who has gone there and what they’re doing.`
-    ].join('\n');
-  }
-
-  // Default: general advisor using summary + hints
-  return [
-    `You asked: "${message}". I'm your BYU Economics Career Advisor. Using real data on BYU Econ graduates, I can help you explore:\n`,
-    `- **Career paths** across industries (finance, tech/data, consulting, policy/non‑profit, Pre‑PhD, law)\n` +
-    `- **Top employers and locations** where alumni actually work\n` +
-    `- **Graduate school** destinations and degree types\n` +
-    `- **Job market outlook** using BLS data\n`,
-    `Here’s a quick snapshot from the dataset:\n${summary}\n`,
-    `Try asking something like:\n` +
-    `- "What careers do BYU Econ grads go into most?"\n` +
-    `- "How do I prepare for economic consulting?"\n` +
-    `- "What does the salary outlook look like for data scientists or economists?"\n` +
-    `- "What should I take if I’m thinking about a PhD in economics?"`
-  ].join('\n');
+  const data = await response.json();
+  const content = Array.isArray(data.content) ? data.content : [];
+  const first = content[0] || {};
+  return first.text || 'No response text returned.';
 }
 
