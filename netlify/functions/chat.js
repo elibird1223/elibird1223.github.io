@@ -38,7 +38,7 @@ exports.handler = async (event) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           response:
-            'AI is not configured yet. Add `ANTHROPIC_API_KEY` in Netlify environment variables, then redeploy.\\n\\n' +
+            'AI is not configured yet. Add `ANTHROPIC_API_KEY` in Netlify environment variables, then redeploy.\n\n' +
             'In the meantime, use the Alumni Explorer + Career Statistics tabs to answer questions from the dataset.'
         })
       };
@@ -280,7 +280,7 @@ async function callAnthropic({ apiKey, userMessage, contextMessage, conversation
       model: 'claude-3-5-sonnet-latest',
       max_tokens: 900,
       temperature: 0.2,
-      system: `${SYSTEM_PROMPT}\\n\\n${contextMessage}`,
+      system: `${SYSTEM_PROMPT}\n\n${contextMessage}`,
       messages
     })
   });
