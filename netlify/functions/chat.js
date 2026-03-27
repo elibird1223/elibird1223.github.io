@@ -152,8 +152,24 @@ let _cachedGraduates = null;
 
 function loadGraduates() {
   if (_cachedGraduates) return _cachedGraduates;
-  const filePath = path.join(process.cwd(), 'data', 'graduates.json');
-  const raw = fs.readFileSync(filePath, 'utf8');
+  // Try multiple paths – the correct one depends on Netlify's runtime extraction layout.
+  const candidates = [
+    path.join(__dirname, 'data', 'graduates.json'),
+    path.join(process.cwd(), 'data', 'graduates.json'),
+    path.resolve('data', 'graduates.json')
+  ];
+  let raw;
+  for (const filePath of candidates) {
+    try {
+      raw = fs.readFileSync(filePath, 'utf8');
+      break;
+    } catch (_) { /* try next */ }
+  }
+  if (!raw) {
+    console.error('graduates.json not found in any candidate path:', candidates);
+    _cachedGraduates = [];
+    return _cachedGraduates;
+  }
   const parsed = JSON.parse(raw);
   _cachedGraduates = Array.isArray(parsed.graduates) ? parsed.graduates : [];
   return _cachedGraduates;
@@ -277,7 +293,7 @@ async function callAnthropic({ apiKey, userMessage, contextMessage, conversation
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-latest',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 900,
       temperature: 0.2,
       system: `${SYSTEM_PROMPT}\n\n${contextMessage}`,
