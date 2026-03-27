@@ -7,6 +7,8 @@ const LOCATION_ALIASES = {
     'salt lake city, utah, us', 'salt lake city, us',
     'greater salt lake city area', 'salt lake county, utah',
     'salt lake city, utah, united states', 'salt lake county, utah', 'salt lake county, utah, united states',
+    'salt lake city, ut, united states', 'salt lake city area', 'salt lake area', 'slc, utah',
+    'salt lake city, utah area', 'salt lake county', 'salt lake city metro area',
   ],
   'Provo': [
     'provo, utah', 'provo, ut', 'provo-orem metro', 'provo, utah, united states',
@@ -108,6 +110,20 @@ const LOCATION_COORDS = {
 function normalizeLocation(raw) {
   if (!raw || typeof raw !== 'string') return null;
   const lower = raw.toLowerCase().trim();
+
+  // Standardize common Salt Lake variants (SLC, metro/area/county naming, UT abbreviations).
+  if (
+    /(^|\b)slc(\b|,)/.test(lower) ||
+    (lower.includes('salt lake') && (
+      lower.includes('city') ||
+      lower.includes('county') ||
+      lower.includes('metro') ||
+      lower.includes('area')
+    ))
+  ) {
+    return 'Salt Lake City';
+  }
+
   if (LOWER_TO_CANONICAL[lower]) return LOWER_TO_CANONICAL[lower];
   for (const [canonical, variants] of Object.entries(LOCATION_ALIASES)) {
     if (lower.includes(canonical.toLowerCase())) return canonical;
