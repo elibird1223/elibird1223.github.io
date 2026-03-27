@@ -257,26 +257,46 @@ const DataManager = {
 
 function normalizeFirstJobLocation(raw) {
   if (!raw || typeof raw !== 'string') return null;
-  const cleaned = raw.trim();
+  const cleaned = raw
+    .normalize('NFKC')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*,\s*/g, ', ')
+    .trim();
   if (!cleaned) return null;
 
-  const lower = cleaned.toLowerCase();
+  const lower = cleaned.toLowerCase().replace(/\.+$/g, '').trim();
   const countryOnly = new Set(['united states', 'usa', 'u.s.a.', 'u.s.', 'us']);
   if (countryOnly.has(lower)) return null;
 
-  // Drop broad state-only rows like "Utah, United States".
   const parts = cleaned.split(',').map((p) => p.trim()).filter(Boolean);
-  const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
-  const secondPart = parts[1]?.toLowerCase() || '';
-  const hasUsCountryTail =
-    lastPart === 'united states' ||
-    lastPart === 'usa' ||
-    lastPart === 'u.s.a.' ||
-    lastPart === 'u.s.' ||
-    lastPart === 'us';
-  if (parts.length === 2 && hasUsCountryTail) return null;
-  if (parts.length === 1 && /^(utah|idaho|arizona|california|texas)$/i.test(parts[0])) return null;
-  if (parts.length === 2 && secondPart === 'united states' && parts[0].toLowerCase() === 'utah') return null;
+  let normalizedParts = [...parts];
+  const usTail = new Set(['united states', 'usa', 'u.s.a.', 'u.s.', 'us']);
+
+  // Remove country suffix when city/state is already present.
+  if (normalizedParts.length >= 3 && usTail.has((normalizedParts[normalizedParts.length - 1] || '').toLowerCase())) {
+    normalizedParts = normalizedParts.slice(0, -1);
+  }
+
+  const usStates = new Set([
+    'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado', 'connecticut', 'delaware',
+    'florida', 'georgia', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa', 'kansas', 'kentucky',
+    'louisiana', 'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi', 'missouri',
+    'montana', 'nebraska', 'nevada', 'new hampshire', 'new jersey', 'new mexico', 'new york',
+    'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon', 'pennsylvania', 'rhode island',
+    'south carolina', 'south dakota', 'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington',
+    'west virginia', 'wisconsin', 'wyoming', 'district of columbia'
+  ]);
+
+  // Drop broad state-only rows like "Utah, United States" or "Utah".
+  if (normalizedParts.length === 1 && usStates.has(normalizedParts[0].toLowerCase())) return null;
+  if (
+    normalizedParts.length === 2 &&
+    usStates.has(normalizedParts[0].toLowerCase()) &&
+    usTail.has(normalizedParts[1].toLowerCase())
+  ) {
+    return null;
+  }
 
   // Canonicalize Salt Lake variants.
   if (
@@ -292,7 +312,13 @@ function normalizeFirstJobLocation(raw) {
     return 'Salt Lake City';
   }
 
-  return cleaned;
+  // Canonicalize common city variants that split counts in the list.
+  if (lower.includes('provo')) return 'Provo, Utah';
+  if (lower.includes('lehi')) return 'Lehi, Utah';
+  if (lower.includes('washington') && lower.includes('district of columbia')) return 'Washington, District of Columbia';
+  if (lower.includes('new york') && !lower.includes('state')) return 'New York, New York';
+
+  return normalizedParts.join(', ');
 }
 
 function buildPhdSummary(phdData) {
