@@ -285,6 +285,45 @@ const App = {
     const firstJobIndustries = DataManager.getFirstJobIndustries();
     const totalFirstJobs = firstJobIndustries.reduce((sum, [, count]) => sum + count, 0);
 
+    // Draw clean percentage labels directly on slices.
+    const slicePercentPlugin = {
+      id: 'slicePercentPlugin',
+      afterDatasetsDraw: (chart) => {
+        const meta = chart.getDatasetMeta(0);
+        if (!meta || !meta.data || !meta.data.length) return;
+
+        const values = chart.data.datasets[0].data || [];
+        const total = values.reduce((a, b) => a + b, 0);
+        if (!total) return;
+
+        const minPctToLabel = 4; // Avoid clutter on tiny slices
+        const c = chart.ctx;
+        c.save();
+        c.font = '600 12px Inter, sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillStyle = '#ffffff';
+        c.shadowColor = 'rgba(0, 0, 0, 0.45)';
+        c.shadowBlur = 3;
+        c.shadowOffsetX = 0;
+        c.shadowOffsetY = 1;
+
+        meta.data.forEach((arc, i) => {
+          const value = values[i];
+          if (!value) return;
+          const pct = Math.round((value / total) * 100);
+          if (pct < minPctToLabel) return;
+
+          const angle = (arc.startAngle + arc.endAngle) / 2;
+          const radius = (arc.innerRadius + arc.outerRadius) / 2;
+          const x = arc.x + Math.cos(angle) * radius;
+          const y = arc.y + Math.sin(angle) * radius;
+          c.fillText(`${pct}%`, x, y);
+        });
+        c.restore();
+      }
+    };
+
     const colors = [
       '#002E5D', // BYU Navy
       '#0062B8', // BYU Royal
@@ -337,7 +376,8 @@ const App = {
             }
           }
         }
-      }
+      },
+      plugins: [slicePercentPlugin]
     });
   }
 };
