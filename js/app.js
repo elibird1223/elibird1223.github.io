@@ -3,6 +3,7 @@
 const App = {
   currentView: 'chat',
   industryChart: null,
+  industryBarChart: null,
 
   async init() {
     // Load data
@@ -51,7 +52,7 @@ const App = {
 
     // Initialize charts and map if stats view
     if (view === 'stats') {
-      if (!this.industryChart) {
+      if (!this.industryChart || !this.industryBarChart) {
         this.initCharts();
       }
       if (window.MapManager) {
@@ -280,10 +281,20 @@ const App = {
   },
 
   initCharts() {
-    const ctx = document.getElementById('industry-chart').getContext('2d');
+    const doughnutCanvas = document.getElementById('industry-chart');
+    const barCanvas = document.getElementById('industry-bar-chart');
+    if (!doughnutCanvas || !barCanvas) return;
+
+    const ctx = doughnutCanvas.getContext('2d');
+    const barCtx = barCanvas.getContext('2d');
     // Use first job industries for consistency
     const firstJobIndustries = DataManager.getFirstJobIndustries();
     const totalFirstJobs = firstJobIndustries.reduce((sum, [, count]) => sum + count, 0);
+    const industryLabels = firstJobIndustries.map(([name]) => name);
+    const industryCounts = firstJobIndustries.map(([, count]) => count);
+    const industryPercents = firstJobIndustries.map(([, count]) =>
+      totalFirstJobs ? Math.round((count / totalFirstJobs) * 100) : 0
+    );
 
     // Draw clean percentage labels directly on slices.
     const slicePercentPlugin = {
@@ -345,7 +356,7 @@ const App = {
           return `${name} (${pct}%)`;
         }),
         datasets: [{
-          data: firstJobIndustries.map(([, count]) => count),
+          data: industryCounts,
           backgroundColor: colors,
           borderWidth: 2,
           borderColor: '#ffffff'
@@ -378,6 +389,59 @@ const App = {
         }
       },
       plugins: [slicePercentPlugin]
+    });
+
+    this.industryBarChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: industryLabels,
+        datasets: [{
+          label: 'Percent of first jobs',
+          data: industryPercents,
+          backgroundColor: colors.map((c) => `${c}CC`),
+          borderColor: colors,
+          borderWidth: 1.5,
+          borderRadius: 6,
+          barThickness: 16
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: Math.max(30, Math.max(...industryPercents) + 3),
+            ticks: {
+              callback: (value) => `${value}%`
+            },
+            grid: {
+              color: '#e5e7eb'
+            }
+          },
+          y: {
+            ticks: {
+              font: { size: 11 }
+            },
+            grid: {
+              display: false
+            }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const pct = context.raw;
+                const count = industryCounts[context.dataIndex] || 0;
+                return `${count} grads (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
     });
   }
 };
