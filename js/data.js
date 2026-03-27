@@ -80,7 +80,9 @@ const DataManager = {
     const locations = {};
     this.graduates.forEach(g => {
       if (g.firstLocation) {
-        locations[g.firstLocation] = (locations[g.firstLocation] || 0) + 1;
+        const normalized = normalizeFirstJobLocation(g.firstLocation);
+        if (!normalized) return;
+        locations[normalized] = (locations[normalized] || 0) + 1;
       }
     });
     return Object.entries(locations).sort((a, b) => b[1] - a[1]);
@@ -101,7 +103,8 @@ const DataManager = {
   getLocations() {
     const locations = new Set();
     this.graduates.forEach(g => {
-      if (g.firstLocation) locations.add(g.firstLocation);
+      const normalized = normalizeFirstJobLocation(g.firstLocation);
+      if (normalized) locations.add(normalized);
     });
     return Array.from(locations).sort();
   },
@@ -120,7 +123,10 @@ const DataManager = {
     return this.graduates.filter(g => {
       if (filters.industry && g.firstIndustry !== filters.industry) return false;
       if (filters.company && g.firstCompany !== filters.company) return false;
-      if (filters.location && g.firstLocation !== filters.location) return false;
+      if (filters.location) {
+        const normalized = normalizeFirstJobLocation(g.firstLocation);
+        if (normalized !== filters.location) return false;
+      }
       if (filters.gradSchool && g.gradSchool !== filters.gradSchool) return false;
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
@@ -248,6 +254,46 @@ const DataManager = {
     };
   }
 };
+
+function normalizeFirstJobLocation(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const cleaned = raw.trim();
+  if (!cleaned) return null;
+
+  const lower = cleaned.toLowerCase();
+  const countryOnly = new Set(['united states', 'usa', 'u.s.a.', 'u.s.', 'us']);
+  if (countryOnly.has(lower)) return null;
+
+  // Drop broad state-only rows like "Utah, United States".
+  const parts = cleaned.split(',').map((p) => p.trim()).filter(Boolean);
+  const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
+  const secondPart = parts[1]?.toLowerCase() || '';
+  const hasUsCountryTail =
+    lastPart === 'united states' ||
+    lastPart === 'usa' ||
+    lastPart === 'u.s.a.' ||
+    lastPart === 'u.s.' ||
+    lastPart === 'us';
+  if (parts.length === 2 && hasUsCountryTail) return null;
+  if (parts.length === 1 && /^(utah|idaho|arizona|california|texas)$/i.test(parts[0])) return null;
+  if (parts.length === 2 && secondPart === 'united states' && parts[0].toLowerCase() === 'utah') return null;
+
+  // Canonicalize Salt Lake variants.
+  if (
+    /(^|\b)slc(\b|,)/i.test(cleaned) ||
+    (lower.includes('salt lake') && (
+      lower.includes('city') ||
+      lower.includes('metro') ||
+      lower.includes('metropolitan') ||
+      lower.includes('area') ||
+      lower.includes('county')
+    ))
+  ) {
+    return 'Salt Lake City';
+  }
+
+  return cleaned;
+}
 
 function buildPhdSummary(phdData) {
   if (!phdData || !Array.isArray(phdData.placements)) return 'Not available';
